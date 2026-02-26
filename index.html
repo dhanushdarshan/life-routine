@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeOS – Student Transformation System</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js and React Chart.js 2 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-chartjs-2@5.2.0/dist/index.min.js"></script>
+    <!-- React, ReactDOM, Babel for JSX -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+    <!-- Ensure PropTypes for chartjs (if needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
+    <style>
+        /* Minimal custom style for progress bar integration */
+        .bg-blue-600 { background-color: #2563eb; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // -------------------- Utility Functions (from calculations.js) --------------------
+        function calculateCalories(height, weight, age, goalWeight, studyHours) {
+            const bmr = 10 * weight + 6.25 * height - 5 * age + 5; // male
+            const maintenance = Math.round(bmr * 1.375); // light active
+            const diff = goalWeight - weight;
+            let targetCalories;
+            if (diff > 0) {
+                targetCalories = maintenance + 300; // surplus
+            } else if (diff < 0) {
+                targetCalories = maintenance - 300; // deficit
+            } else {
+                targetCalories = maintenance;
+            }
+            if (targetCalories < 1200) targetCalories = 1200;
+            const protein = Math.round(weight * 1.8);
+            const proteinCals = protein * 4;
+            const remainingCals = targetCalories - proteinCals;
+            const carbs = Math.round((remainingCals * 0.6) / 4);
+            const fats = Math.round((remainingCals * 0.4) / 9);
+            return {
+                maintenance,
+                targetCalories,
+                protein,
+                carbs,
+                fats,
+                surplus: diff > 0 ? 300 : (diff < 0 ? -300 : 0)
+            };
+        }
+
+        function predictTransformation(height, weight, age, goalWeight, studyHours, calorieData) {
+            const { targetCalories, maintenance } = calorieData;
+            const dailySurplus = targetCalories - maintenance;
+            const monthlyChange = (dailySurplus * 30) / 7700; // kg per month
+            const months = 6;
+            let weightProgression = [];
+            let currentWeight = weight;
+
+            for (let i = 1; i <= months; i++) {
+                let deltaWeight = monthlyChange;
+                let muscleDelta, fatDelta;
+                if (dailySurplus > 0) {
+                    muscleDelta = Math.min(0.5, deltaWeight * 0.4);
+                    if (muscleDelta < 0) muscleDelta = 0;
+                    fatDelta = deltaWeight - muscleDelta;
+                } else if (dailySurplus < 0) {
+                    muscleDelta = Math.max(-0.2, deltaWeight * 0.2);
+                    fatDelta = deltaWeight - muscleDelta;
+                } else {
+                    muscleDelta = 0;
+                    fatDelta = 0;
+                }
+                currentWeight += deltaWeight;
+                if (currentWeight < 30) currentWeight = 30;
+                weightProgression.push({
+                    month: i,
+                    weight: Math.round(currentWeight * 10) / 10,
+                    muscleDelta: Math.round(muscleDelta * 10) / 10,
+                    fatDelta: Math.round(fatDelta * 10) / 10,
+                });
+            }
+
+            const start = weight;
+            const end = goalWeight;
+            const current = currentWeight;
+            let progressPercent;
+            if (end > start) {
+                progressPercent = Math.min(100, ((current - start) / (end - start)) * 100);
+            } else if (end < start) {
+                progressPercent = Math.min(100, ((start - current) / (start - end)) * 100);
+            } else {
+                progressPercent = 100;
+            }
+
+            const bmi = weight / ((height/100) ** 2);
+            let description = '';
+            if (bmi < 18.5) description = 'Underweight. Focus on muscle gain.';
+            else if (bmi < 25) description = 'Normal weight. Maintain or recomposition.';
+            else if (bmi < 30) description = 'Overweight. Focus on fat loss.';
+            else description = 'Obese. Prioritize fat loss.';
+            if (dailySurplus > 100) description += ' Bulking phase: expect muscle and some fat gain.';
+            else if (dailySurplus < -100) description += ' Cutting phase: expect fat loss with minimal muscle loss.';
+            else description += ' Maintenance phase: body composition stable.';
+
+            return {
+                weightProgression,
+                progressPercent: Math.round(progressPercent),
+                description,
+                finalWeight: currentWeight,
+            };
+        }
+
+        function generateRoutine(wakeUpTime, studyHours) {
+            const [hour, minute] = wakeUpTime.split(':').map(Number);
+            const wakeUp = new Date();
+            wakeUp.setHours(hour, minute, 0);
+            const sleep = new Date(wakeUp.getTime() + 16 * 60 * 60 * 1000); // 16 hours awake
+
+            const formatTime = (date) => {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            };
+
+            const blocks = [];
+            let current = new Date(wakeUp);
+
+            blocks.push({ time: formatTime(current), activity: 'Wake up & Morning routine' });
+            current.setMinutes(current.getMinutes() + 30);
+            blocks.push({ time: formatTime(current), activity: 'Breakfast' });
+            current.setMinutes(current.getMinutes() + 30);
+
+            const studyPerBlock = studyHours / 3;
+            const studyMinutes = studyPerBlock * 60;
+
+            blocks.push({ time: formatTime(current), activity: `Deep Work: DSA (${studyPerBlock.toFixed(1)} hrs)` });
+            current.setMinutes(current.getMinutes() + studyMinutes);
+            blocks.push({ time: formatTime(current), activity: 'Break' });
+            current.setMinutes(current.getMinutes() + 15);
+            blocks.push({ time: formatTime(current), activity: 'Workout (45 min)' });
+            current.setMinutes(current.getMinutes() + 45);
+            blocks.push({ time: formatTime(current), activity: 'Lunch' });
+            current.setMinutes(current.getMinutes() + 30);
+            blocks.push({ time: formatTime(current), activity: `Deep Work: Core CS (${studyPerBlock.toFixed(1)} hrs)` });
+            current.setMinutes(current.getMinutes() + studyMinutes);
+            blocks.push({ time: formatTime(current), activity: 'Break' });
+            current.setMinutes(current.getMinutes() + 15);
+            blocks.push({ time: formatTime(current), activity: `Deep Work: Web Dev (${studyPerBlock.toFixed(1)} hrs)` });
+            current.setMinutes(current.getMinutes() + studyMinutes);
+            blocks.push({ time: formatTime(current), activity: 'Dinner' });
+            current.setMinutes(current.getMinutes() + 30);
+
+            const windDownStart = new Date(sleep.getTime() - 60 * 60 * 1000);
+            if (current < windDownStart) {
+                blocks.push({ time: formatTime(current), activity: 'Free time / Relax' });
+                current = new Date(windDownStart);
+            }
+            blocks.push({ time: formatTime(current), activity: 'Wind down (no screens)' });
+            current.setMinutes(current.getMinutes() + 60);
+            blocks.push({ time: formatTime(current), activity: 'Sleep' });
+
+            return blocks;
+        }
+
+        function getWorkoutPlan() {
+            return {
+                split: 'Push/Pull/Legs',
+                days: [
+                    { day: 'Monday', focus: 'Push (chest, shoulders, triceps)', exercises: 'Push-ups (3x12), Pike push-ups (3x10), Tricep dips (3x10)' },
+                    { day: 'Tuesday', focus: 'Pull (back, biceps)', exercises: 'Pull-ups or rows (3x8), Superman holds (3x15), Bicep curls with resistance band (3x12)' },
+                    { day: 'Wednesday', focus: 'Legs & Core', exercises: 'Squats (3x15), Lunges (3x12 each), Plank (3x45s)' },
+                    { day: 'Thursday', focus: 'Push', exercises: 'Incline push-ups (3x12), Diamond push-ups (3x8), Lateral raises (3x15)' },
+                    { day: 'Friday', focus: 'Pull', exercises: 'Australian rows (3x12), Face pulls (3x15), Hammer curls (3x12)' },
+                    { day: 'Saturday', focus: 'Legs & Core', exercises: 'Glute bridges (3x15), Calf raises (3x20), Bicycle crunches (3x20)' },
+                    { day: 'Sunday', focus: 'Rest / Active recovery', exercises: 'Stretching or light walk' },
+                ],
+                progressiveOverload: 'Increase reps by 1-2 each week, or add a set, or reduce rest time. Aim to reach 15-20 reps before progressing to harder variations.'
+            };
+        }
+
+        function getDietPlan() {
+            return {
+                meals: [
+                    { time: '07:30', meal: 'Breakfast', foods: 'Oats with milk, banana, peanut butter, dry fruits' },
+                    { time: '10:30', meal: 'Snack', foods: 'Boiled eggs (2) + fruit' },
+                    { time: '13:00', meal: 'Lunch', foods: 'Rice, chicken curry, vegetables' },
+                    { time: '16:00', meal: 'Pre-workout', foods: 'Banana + peanut butter' },
+                    { time: '19:00', meal: 'Dinner', foods: 'Rice / Roti, eggs/ chicken, salad' },
+                    { time: '21:30', meal: 'Evening snack', foods: 'Milk with dry fruits' }
+                ],
+                notes: 'Adjust portion sizes based on calorie target. Drink plenty of water.'
+            };
+        }
+
+        // -------------------- Components --------------------
+        const CalorieCard = ({ data }) => {
+            const { maintenance, targetCalories, protein, carbs, fats, surplus } = data;
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4">Calorie & Macro Target</h2>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm text-gray-600">Maintenance</p>
+                            <p className="text-2xl font-bold">{maintenance} kcal</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm text-gray-600">Target ({surplus > 0 ? 'Bulking' : surplus < 0 ? 'Cutting' : 'Maintain'})</p>
+                            <p className="text-2xl font-bold">{targetCalories} kcal</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm text-gray-600">Protein</p>
+                            <p className="text-2xl font-bold">{protein}g</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm text-gray-600">Carbs</p>
+                            <p className="text-2xl font-bold">{carbs}g</p>
+                        </div>
+                        <div className="bg-gray-50 p-3 rounded">
+                            <p className="text-sm text-gray-600">Fats</p>
+                            <p className="text-2xl font-bold">{fats}g</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Chart component using Chart.js via react-chartjs-2
+        const { Line } = ReactChartjs2;
+
+        const TransformationCard = ({ data }) => {
+            const { weightProgression, progressPercent, description } = data;
+            const chartData = {
+                labels: weightProgression.map(d => `Month ${d.month}`),
+                datasets: [
+                    {
+                        label: 'Weight (kg)',
+                        data: weightProgression.map(d => d.weight),
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                    },
+                ],
+            };
+            const options = {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: false },
+                },
+                scales: {
+                    y: { beginAtZero: false },
+                },
+            };
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4">Body Transformation Prediction (6 months)</h2>
+                    <div className="mb-4">
+                        <Line data={chartData} options={options} />
+                    </div>
+                    <div className="mb-4">
+                        <p className="text-sm text-gray-600">Progress to Goal</p>
+                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progressPercent}%` }}></div>
+                        </div>
+                        <p className="text-sm mt-1">{progressPercent}% completed (after 6 months)</p>
+                    </div>
+                    <div className="bg-gray-50 p-3 rounded">
+                        <p className="text-sm text-gray-600">Physique Description</p>
+                        <p className="text-lg">{description}</p>
+                    </div>
+                </div>
+            );
+        };
+
+        const RoutineCard = ({ blocks }) => {
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4">24-Hour Routine</h2>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {blocks.map((block, index) => (
+                            <div key={index} className="flex border-b pb-2">
+                                <span className="font-medium w-24">{block.time}</span>
+                                <span className="text-gray-700">{block.activity}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const WorkoutCard = ({ plan }) => {
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4">Workout Plan: 45-min Bodyweight Split</h2>
+                    <p className="text-sm text-gray-600 mb-2">Split: {plan.split}</p>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Day</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Focus</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Exercises</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {plan.days.map((day, idx) => (
+                                    <tr key={idx}>
+                                        <td className="px-4 py-2 whitespace-nowrap">{day.day}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap">{day.focus}</td>
+                                        <td className="px-4 py-2">{day.exercises}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="mt-4 bg-yellow-50 p-3 rounded">
+                        <p className="font-medium">Progressive Overload:</p>
+                        <p className="text-sm">{plan.progressiveOverload}</p>
+                    </div>
+                </div>
+            );
+        };
+
+        const DietCard = ({ plan }) => {
+            return (
+                <div className="bg-white rounded-lg shadow p-6">
+                    <h2 className="text-xl font-semibold mb-4">Diet Plan (Indian Style)</h2>
+                    <div className="space-y-3">
+                        {plan.meals.map((meal, idx) => (
+                            <div key={idx} className="flex border-b pb-2">
+                                <span className="font-medium w-24">{meal.time}</span>
+                                <div>
+                                    <span className="font-medium">{meal.meal}:</span> {meal.foods}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="mt-4 text-sm text-gray-600">{plan.notes}</p>
+                </div>
+            );
+        };
+
+        // -------------------- Main Dashboard Component --------------------
+        const Dashboard = () => {
+            const [height, setHeight] = React.useState(175);
+            const [weight, setWeight] = React.useState(70);
+            const [age, setAge] = React.useState(21);
+            const [goalWeight, setGoalWeight] = React.useState(75);
+            const [wakeUpTime, setWakeUpTime] = React.useState('07:00');
+            const [studyHours, setStudyHours] = React.useState(6);
+
+            const calorieData = React.useMemo(() => 
+                calculateCalories(height, weight, age, goalWeight, studyHours),
+                [height, weight, age, goalWeight, studyHours]
+            );
+
+            const transformationData = React.useMemo(() => 
+                predictTransformation(height, weight, age, goalWeight, studyHours, calorieData),
+                [height, weight, age, goalWeight, studyHours, calorieData]
+            );
+
+            const routineBlocks = React.useMemo(() => 
+                generateRoutine(wakeUpTime, studyHours),
+                [wakeUpTime, studyHours]
+            );
+
+            const workoutPlan = React.useMemo(() => getWorkoutPlan(), []);
+            const dietPlan = React.useMemo(() => getDietPlan(), []);
+
+            return (
+                <div className="max-w-7xl mx-auto px-4 py-8 bg-gray-100 min-h-screen">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">LifeOS – Student Transformation System</h1>
+                    
+                    {/* Input Section */}
+                    <div className="bg-white rounded-lg shadow p-6 mb-8">
+                        <h2 className="text-xl font-semibold mb-4">Your Profile</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Height (cm)</label>
+                                <input type="number" value={height} onChange={(e) => setHeight(parseFloat(e.target.value) || 0)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Weight (kg)</label>
+                                <input type="number" value={weight} onChange={(e) => setWeight(parseFloat(e.target.value) || 0)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Age</label>
+                                <input type="number" value={age} onChange={(e) => setAge(parseFloat(e.target.value) || 0)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Goal Weight (kg)</label>
+                                <input type="number" value={goalWeight} onChange={(e) => setGoalWeight(parseFloat(e.target.value) || 0)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Wake-up Time</label>
+                                <input type="time" value={wakeUpTime} onChange={(e) => setWakeUpTime(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Study Hours/day</label>
+                                <input type="number" step="0.5" value={studyHours} onChange={(e) => setStudyHours(parseFloat(e.target.value) || 0)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Cards Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <CalorieCard data={calorieData} />
+                        <TransformationCard data={transformationData} />
+                        <RoutineCard blocks={routineBlocks} />
+                        <WorkoutCard plan={workoutPlan} />
+                        <div className="lg:col-span-2">
+                            <DietCard plan={dietPlan} />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.createRoot(document.getElementById('root')).render(<Dashboard />);
+    </script>
+</body>
+</html>
