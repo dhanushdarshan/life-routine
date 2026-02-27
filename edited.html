@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LifeOS – Student Transformation System</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* Custom smooth transitions and minimal extra styling */
+    .tab-btn.active { border-bottom-color: #10b981; color: #10b981; }
+    .card { transition: all 0.2s ease; }
+    .stat-item { min-width: 80px; }
+    /* Ensure chart canvas doesn't stretch too much */
+    canvas { max-height: 200px; width: 100% !important; }
+  </style>
+</head>
+<body class="bg-[#050508] text-[#e8e8f0] font-sans antialiased">
+
+<!-- LANDING PAGE (visible initially) -->
+<div id="landing" class="min-h-screen flex items-center justify-center px-4 py-8 bg-[#050508]">
+  <div class="max-w-md w-full bg-[#0a0a12] p-8 rounded-2xl border border-[#1a1a2e] shadow-2xl">
+    <div class="text-center mb-8">
+      <span class="text-xs uppercase tracking-widest text-[#39ff7a] bg-[#39ff7a10] px-3 py-1 rounded-full">Student Transformation System</span>
+      <h1 class="text-4xl font-bold mt-4 font-['Syne']">Life<span class="text-[#39ff7a]">OS</span></h1>
+      <p class="text-gray-400 text-sm mt-2">Enter your details. Get your complete blueprint.</p>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">📏 Height (cm)</label>
+        <input type="number" id="height" value="175" min="100" max="250" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a] transition">
+        <div class="text-xs text-red-400 mt-1 hidden" id="heightErr"></div>
+      </div>
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">⚖️ Weight (kg)</label>
+        <input type="number" id="weight" value="70" min="30" max="200" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a]">
+      </div>
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">🎂 Age</label>
+        <input type="number" id="age" value="21" min="14" max="50" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a]">
+      </div>
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">🎯 Goal Weight (kg)</label>
+        <input type="number" id="goal" value="75" min="30" max="200" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a]">
+      </div>
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">⏰ Wake-up time</label>
+        <input type="time" id="wake" value="06:00" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a] [color-scheme:dark]">
+      </div>
+      <div>
+        <label class="block text-xs font-mono uppercase text-gray-500 mb-1">📚 Daily study hours</label>
+        <input type="number" id="study" value="6" min="1" max="16" step="0.5" class="w-full bg-[#12121e] border border-[#1a1a2e] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#39ff7a]">
+      </div>
+
+      <button id="generateBtn" class="w-full bg-[#39ff7a] text-[#050508] font-bold py-4 rounded-lg mt-6 uppercase tracking-wider hover:shadow-[0_0_30px_#39ff7a55] transition">⚡ Generate My Plan</button>
+    </div>
+    <p class="text-center text-xs font-mono text-gray-600 mt-6">Based on Mifflin‑St Jeor & sports science</p>
+  </div>
+</div>
+
+<!-- DASHBOARD (hidden initially) -->
+<div id="dashboard" class="hidden min-h-screen bg-[#050508]">
+
+  <!-- Header with tabs -->
+  <header class="sticky top-0 z-50 bg-[#050508]/90 backdrop-blur border-b border-[#1a1a2e]">
+    <div class="max-w-6xl mx-auto px-4 flex items-center justify-between h-16">
+      <span class="font-['Syne'] text-xl font-bold">Life<span class="text-[#39ff7a]">OS</span></span>
+      <div class="flex gap-2 text-xs font-mono text-gray-400 bg-[#0a0a12] px-3 py-1.5 rounded-full border border-[#1a1a2e]">
+        <span id="statAge"></span> • <span id="statHt"></span> • <span id="statWt"></span> → <span id="statGoal"></span>
+      </div>
+      <button id="resetBtn" class="text-xs font-mono text-gray-400 hover:text-white border border-[#1a1a2e] px-3 py-1.5 rounded-full">↩ Reset</button>
+    </div>
+    <!-- Tab bar -->
+    <div class="flex gap-6 px-4 max-w-6xl mx-auto text-sm font-mono overflow-x-auto">
+      <button class="tab-btn py-3 border-b-2 border-transparent hover:text-[#39ff7a] transition active" data-tab="calories">🔥 Calories</button>
+      <button class="tab-btn py-3 border-b-2 border-transparent hover:text-[#39ff7a] transition" data-tab="transform">📈 Transformation</button>
+      <button class="tab-btn py-3 border-b-2 border-transparent hover:text-[#39ff7a] transition" data-tab="routine">⏰ Routine</button>
+      <button class="tab-btn py-3 border-b-2 border-transparent hover:text-[#39ff7a] transition" data-tab="workout">💪 Workout</button>
+      <button class="tab-btn py-3 border-b-2 border-transparent hover:text-[#39ff7a] transition" data-tab="diet">🍱 Diet</button>
+    </div>
+  </header>
+
+  <!-- Stats row -->
+  <div class="border-b border-[#1a1a2e] bg-[#0a0a12] py-3 overflow-x-auto">
+    <div class="max-w-6xl mx-auto px-4 flex gap-8 text-xs" id="statsRow"></div>
+  </div>
+
+  <!-- Content sections -->
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    <!-- Calories section (visible by default) -->
+    <div id="sec-calories" class="section"></div>
+    <div id="sec-transform" class="section hidden"></div>
+    <div id="sec-routine" class="section hidden"></div>
+    <div id="sec-workout" class="section hidden"></div>
+    <div id="sec-diet" class="section hidden"></div>
+  </main>
+
+  <footer class="border-t border-[#1a1a2e] py-6 text-center text-xs font-mono text-gray-600">
+    LifeOS — Built for student transformation. Not medical advice.
+  </footer>
+</div>
+
+<script>
+  (function() {
+    // ---------- STATE ----------
+    let user = null;               // { height, weight, age, goal, wake, study }
+    let activeTab = 'calories';
+    let chartInstance = null;
+
+    // ---------- DOM ELEMENTS ----------
+    const landing = document.getElementById('landing');
+    const dashboard = document.getElementById('dashboard');
+    const generateBtn = document.getElementById('generateBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const sections = {
+      calories: document.getElementById('sec-calories'),
+      transform: document.getElementById('sec-transform'),
+      routine: document.getElementById('sec-routine'),
+      workout: document.getElementById('sec-workout'),
+      diet: document.getElementById('sec-diet')
+    };
+
+    // ---------- UTILS / CALCULATIONS ----------
+    function calculateCalories(h, w, a) {
+      const bmr = 10 * w + 6.25 * h - 5 * a + 5; // male
+      const maintenance = Math.round(bmr * 1.55);  // moderately active
+      const bulking = maintenance + 350;
+      const cutting = maintenance - 400;
+      const protein = Math.round(w * 1.8);
+      // macros for maintenance
+      const fatCals = Math.round(maintenance * 0.25);
+      const fat = Math.round(fatCals / 9);
+      const carbs = Math.round((maintenance - protein*4 - fatCals) / 4);
+      // macros for bulking
+      const bFatCals = Math.round(bulking * 0.25);
+      const bFat = Math.round(bFatCals / 9);
+      const bCarbs = Math.round((bulking - protein*4 - bFatCals) / 4);
+      return { bmr, maintenance, bulking, cutting, protein, carbs, fat, bCarbs, bFat };
+    }
+
+    function predictTransformation(start, goal) {
+      const isBulk = goal > start;
+      const weekly = isBulk ? 0.25 : -0.4;  // kg per week
+      const months = [];
+      let cur = start;
+      for (let m = 1; m <= 6; m++) {
+        cur = Math.round((cur + weekly * 4) * 10) / 10;
+        if (isBulk) cur = Math.min(cur, goal + 3);
+        else cur = Math.max(cur, goal - 3);
+        const muscle = isBulk ? +(0.5 + Math.random()*0.3).toFixed(2) : +(0.1 + Math.random()*0.15).toFixed(2);
+        const fat = isBulk ? +(weekly*4 - muscle).toFixed(2) : +(-weekly*4 - muscle).toFixed(2);
+        const progress = Math.min(100, Math.round( (Math.abs(start - cur) / Math.max(1, Math.abs(start - goal))) * 100 ));
+        months.push({ month: m, weight: cur, muscle, fat, progress });
+      }
+      return { months, isBulk };
+    }
+
+    function generateRoutine(wake, studyH) {
+      const [h, m] = wake.split(':').map(Number);
+      const start = h * 60 + (m || 0);
+      const fmt = (mins) => {
+        const total = (mins % 1440 + 1440) % 1440;
+        const hr = Math.floor(total / 60);
+        const min = total % 60;
+        const ampm = hr >= 12 ? 'PM' : 'AM';
+        const hr12 = hr % 12 || 12;
+        return `${hr12}:${min.toString().padStart(2,'0')} ${ampm}`;
+      };
+      const extraStudy = Math.max(60, studyH * 20);
+      return [
+        { time: fmt(start), activity: '🌅 Wake up + Cold water' },
+        { time: fmt(start+10), activity: '🧘 Meditation / Journaling' },
+        { time: fmt(start+30), activity: '🥚 Breakfast (high protein)' },
+        { time: fmt(start+60), activity: '📚 Deep Work: DSA / Algorithms' },
+        { time: fmt(start+150), activity: '☕ Break + Walk' },
+        { time: fmt(start+165), activity: '📘 Deep Work: Core CS (OS/CN/DBMS)' },
+        { time: fmt(start+255), activity: '🍱 Lunch (balanced)' },
+        { time: fmt(start+300), activity: '💪 Workout – 45min bodyweight' },
+        { time: fmt(start+345), activity: '🚿 Shower + Recovery' },
+        { time: fmt(start+370), activity: '🌐 Deep Work: Web Dev / Projects' },
+        { time: fmt(start+370+extraStudy), activity: '🍌 Evening snack' },
+        { time: fmt(start+385+extraStudy), activity: '📖 Revision / Flashcards' },
+        { time: fmt(start+445+extraStudy), activity: '🍗 Dinner (high protein)' },
+        { time: fmt(start+490+extraStudy), activity: '📵 Screen‑free wind down' },
+        { time: fmt(start+520+extraStudy), activity: '😴 Sleep (8h)' }
+      ];
+    }
+
+    // Workout data (static)
+    const workoutPlan = [
+      { day:'Monday', focus:'Push – Chest, Shoulders, Triceps', color:'#39ff7a',
+        ex:[{n:'Push-ups',s:4,r:'15-20'},{n:'Pike Push-ups',s:3,r:'12-15'},{n:'Diamond Push-ups',s:3,r:'10-12'},
+            {n:'Decline Push-ups',s:3,r:'12-15'},{n:'Tricep Dips',s:3,r:'15-20'},{n:'Wide Push-ups',s:3,r:'15'}] },
+      { day:'Tuesday', focus:'Pull – Back, Biceps', color:'#00d4ff',
+        ex:[{n:'Pull-ups / Negatives',s:4,r:'6-10'},{n:'Australian Rows',s:4,r:'12-15'},{n:'Doorframe Rows',s:3,r:'15'},
+            {n:'Superman Holds',s:3,r:'12'},{n:'Resistance Band Curls',s:3,r:'15'},{n:'Reverse Snow Angels',s:3,r:'12'}] },
+      { day:'Wednesday', focus:'Legs – Quads, Glutes, Hamstrings', color:'#bf5fff',
+        ex:[{n:'Squats',s:4,r:'20-25'},{n:'Bulgarian Split Squats',s:3,r:'12/leg'},{n:'RDL (weighted bag)',s:3,r:'15'},
+            {n:'Jump Squats',s:3,r:'15'},{n:'Glute Bridges',s:4,r:'20'},{n:'Calf Raises',s:4,r:'25'}] },
+      { day:'Thursday', focus:'Active Recovery – Core + Mobility', color:'#ff6b35',
+        ex:[{n:'Plank',s:3,r:'60s'},{n:'Side Plank',s:3,r:'45s'},{n:'Leg Raises',s:3,r:'15'},
+            {n:'Ab Wheel',s:3,r:'10'},{n:'Yoga / Mobility',s:1,r:'15 min'},{n:'Box Breathing',s:1,r:'5 min'}] },
+      { day:'Friday', focus:'Full Body – Compound', color:'#39ff7a',
+        ex:[{n:'Burpees',s:3,r:'15'},{n:'Push-ups (max)',s:3,r:'Max'},{n:'Jump Squats',s:3,r:'15'},
+            {n:'Mountain Climbers',s:3,r:'30s'},{n:'Pike Push-ups',s:3,r:'12'},{n:'Bodyweight Rows',s:3,r:'15'}] },
+      { day:'Saturday', focus:'Optional Cardio / Skill', color:'#00d4ff',
+        ex:[{n:'30-min Walk/Jog',s:1,r:'30 min'},{n:'Handstand Practice',s:5,r:'20-30s'},{n:'L‑sit Attempts',s:3,r:'10-15s'},
+            {n:'Jump Rope',s:5,r:'60s'}] },
+      { day:'Sunday', focus:'Complete Rest', color:'#6b7280',
+        ex:[{n:'Rest',s:'–',r:'–'},{n:'Light Walk (optional)',s:1,r:'20 min'},{n:'Meal Prep',s:1,r:'1 hour'}] }
+    ];
+
+    // Diet data
+    const dietMeals = [
+      { time:'7:00 AM', name:'Power Breakfast', icon:'🥚', color:'#39ff7a',
+        items:[{f:'Whole Eggs',q:'4 eggs',cal:280,p:24,c:2,f:20},{f:'Oats',q:'80g',cal:300,p:10,c:55,f:5},{f:'Banana',q:'1 med',cal:90,p:1,c:23,f:0},{f:'Milk',q:'200ml',cal:130,p:6,c:10,f:7}] },
+      { time:'1:00 PM', name:'Lunch – Muscle Fuel', icon:'🍱', color:'#00d4ff',
+        items:[{f:'Chicken Breast',q:'150g',cal:248,p:46,c:0,f:5},{f:'Rice',q:'150g',cal:195,p:4,c:43,f:0},{f:'Dal / Veg',q:'1 cup',cal:120,p:7,c:20,f:2}] },
+      { time:'4:30 PM', name:'Pre‑Workout Snack', icon:'⚡', color:'#ff6b35',
+        items:[{f:'Banana',q:'1 large',cal:110,p:1,c:28,f:0},{f:'Peanut Butter',q:'2 tbsp',cal:190,p:8,c:7,f:16},{f:'Dry Fruits',q:'30g',cal:180,p:5,c:8,f:16}] },
+      { time:'7:00 PM', name:'Post‑Workout Dinner', icon:'🍗', color:'#bf5fff',
+        items:[{f:'Chicken Breast',q:'150g',cal:248,p:46,c:0,f:5},{f:'Rice',q:'100g',cal:130,p:3,c:29,f:0},{f:'Milk',q:'300ml',cal:195,p:10,c:14,f:10}] },
+      { time:'10:00 PM', name:'Bedtime Casein', icon:'🌙', color:'#39ff7a',
+        items:[{f:'Milk',q:'250ml',cal:165,p:8,c:12,f:9},{f:'Oats',q:'30g',cal:115,p:4,c:20,f:2},{f:'Peanut Butter',q:'1 tbsp',cal:95,p:4,c:3,f:8}] }
+    ];
+
+    // ---------- RENDER FUNCTIONS ----------
+    function renderDashboard() {
+      if (!user) return;
+      const c = calculateCalories(user.height, user.weight, user.age);
+      const trans = predictTransformation(user.weight, user.goal);
+      const routine = generateRoutine(user.wake, user.study);
+
+      // Stats row
+      document.getElementById('statAge').innerText = user.age + 'y';
+      document.getElementById('statHt').innerText = user.height + 'cm';
+      document.getElementById('statWt').innerText = user.weight + 'kg';
+      document.getElementById('statGoal').innerText = user.goal + 'kg';
+
+      const statsRow = document.getElementById('statsRow');
+      statsRow.innerHTML = `
+        <div class="stat-item"><span class="text-gray-500">Height</span><br><span class="font-bold">${user.height} cm</span></div>
+        <div class="stat-item"><span class="text-gray-500">Weight</span><br><span class="font-bold">${user.weight} kg</span></div>
+        <div class="stat-item"><span class="text-gray-500">Goal</span><br><span class="font-bold">${user.goal} kg</span></div>
+        <div class="stat-item"><span class="text-gray-500">Age</span><br><span class="font-bold">${user.age} y</span></div>
+        <div class="stat-item"><span class="text-gray-500">Wake</span><br><span class="font-bold">${user.wake}</span></div>
+        <div class="stat-item"><span class="text-gray-500">Study</span><br><span class="font-bold">${user.study} h</span></div>
+        <div class="stat-item"><span class="text-gray-500">BMR</span><br><span class="font-bold">${c.bmr}</span></div>
+        <div class="stat-item"><span class="text-gray-500">Maintenance</span><br><span class="font-bold">${c.maintenance}</span></div>
+      `;
+
+      // Calories section
+      sections.calories.innerHTML = `
+        <div class="mb-8">
+          <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><span class="w-1 h-6 bg-[#39ff7a] rounded-full"></span>Calorie & Macro Target</h2>
+          <div class="grid md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#1a1a2e]">
+              <div class="text-xs uppercase tracking-wider text-gray-500">Maintenance</div>
+              <div class="text-3xl font-bold text-white">${c.maintenance}</div>
+              <div class="text-xs text-gray-500">kcal/day</div>
+            </div>
+            <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#39ff7a33]">
+              <div class="text-xs uppercase tracking-wider text-gray-500">Lean Bulk</div>
+              <div class="text-3xl font-bold text-[#39ff7a]">${c.bulking}</div>
+              <div class="text-xs text-gray-500">+350 kcal</div>
+            </div>
+            <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#ff6b3533]">
+              <div class="text-xs uppercase tracking-wider text-gray-500">Cut</div>
+              <div class="text-3xl font-bold text-[#ff6b35]">${c.cutting}</div>
+              <div class="text-xs text-gray-500">-400 kcal</div>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-6">
+            <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#39ff7a33]">
+              <h3 class="font-mono text-xs uppercase text-gray-500 mb-3">Maintenance Macros</h3>
+              ${macroBar('Protein', c.protein, 200, '#39ff7a')}
+              ${macroBar('Carbs', c.carbs, 400, '#00d4ff')}
+              ${macroBar('Fats', c.fat, 100, '#bf5fff')}
+            </div>
+            <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#39ff7a33]">
+              <h3 class="font-mono text-xs uppercase text-gray-500 mb-3">Bulking Macros (+350)</h3>
+              ${macroBar('Protein', c.protein, 200, '#39ff7a')}
+              ${macroBar('Carbs', c.bCarbs, 450, '#00d4ff')}
+              ${macroBar('Fats', c.bFat, 120, '#bf5fff')}
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Transformation section
+      sections.transform.innerHTML = `
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><span class="w-1 h-6 bg-[#00d4ff] rounded-full"></span>6‑Month Transformation</h2>
+        <div class="grid grid-cols-4 gap-3 mb-6">
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Current</div>
+            <div class="text-xl font-bold">${user.weight} kg</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Goal</div>
+            <div class="text-xl font-bold text-[#39ff7a]">${user.goal} kg</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">6‑mo Projected</div>
+            <div class="text-xl font-bold text-[#00d4ff]">${trans.months[5].weight} kg</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Muscle Gained</div>
+            <div class="text-xl font-bold text-[#bf5fff]">+${trans.months.reduce((s,m)=>s+m.muscle,0).toFixed(1)} kg</div>
+          </div>
+        </div>
+        <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#00d4ff33] mb-6">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-mono text-gray-500">Progress to Goal</span>
+            <span class="text-sm font-bold text-[#00d4ff]">${trans.months[5].progress}%</span>
+          </div>
+          <div class="w-full h-2 bg-[#1a1a2e] rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-[#39ff7a] to-[#00d4ff] rounded-full" style="width: ${trans.months[5].progress}%"></div>
+          </div>
+        </div>
+        <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#00d4ff33]">
+          <canvas id="transformChart" style="max-height:200px"></canvas>
+        </div>
+        <div class="grid md:grid-cols-3 gap-4 mt-6">
+          ${trans.months.map(m => `
+            <div class="bg-[#0a0a12] p-4 rounded-xl border border-[#1a1a2e]">
+              <div class="flex justify-between items-start">
+                <div>
+                  <span class="text-xs font-mono text-gray-500">Month ${m.month}</span>
+                  <div class="text-xl font-bold">${m.weight} kg</div>
+                </div>
+                <div class="text-right text-xs">
+                  <span class="text-[#39ff7a]">+${m.muscle} kg</span> / 
+                  <span class="${m.fat>0?'text-[#ff6b35]':'text-[#39ff7a]'}">${m.fat>0?'+'+m.fat:m.fat} kg</span>
+                </div>
+              </div>
+              <div class="w-full h-1 bg-[#1a1a2e] rounded-full mt-2">
+                <div class="h-full bg-gradient-to-r from-[#39ff7a] to-[#00d4ff] rounded-full" style="width: ${m.progress}%"></div>
+              </div>
+            </div>`).join('')}
+        </div>
+      `;
+
+      // Routine section
+      sections.routine.innerHTML = `
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><span class="w-1 h-6 bg-[#bf5fff] rounded-full"></span>24‑Hour Routine</h2>
+        <div class="bg-[#0a0a12] rounded-xl border border-[#bf5fff33] divide-y divide-[#1a1a2e]">
+          ${routine.map(item => `
+            <div class="flex items-center gap-4 p-4">
+              <span class="font-mono text-xs text-[#bf5fff] w-16">${item.time}</span>
+              <span class="text-sm">${item.activity}</span>
+            </div>`).join('')}
+        </div>
+      `;
+
+      // Workout section
+      sections.workout.innerHTML = `
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><span class="w-1 h-6 bg-[#ff6b35] rounded-full"></span>Weekly Workout Plan</h2>
+        <div class="bg-[#0a0a12] p-5 rounded-xl border border-[#ff6b3533] mb-6">
+          <p class="text-sm text-gray-300">⏱️ 45‑minute bodyweight split – progressive overload through reps, sets, and harder variations.</p>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-6" id="dayButtons"></div>
+        <div id="workoutDetail" class="bg-[#0a0a12] rounded-xl border border-[#ff6b3533] p-5"></div>
+      `;
+
+      // Diet section
+      sections.diet.innerHTML = `
+        <h2 class="text-2xl font-bold mb-4 flex items-center gap-2"><span class="w-1 h-6 bg-[#ff6b35] rounded-full"></span>Indian Diet Plan</h2>
+        <div class="grid grid-cols-4 gap-3 mb-6">
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Daily Calories</div>
+            <div class="text-lg font-bold text-[#39ff7a]">${dietMeals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.cal,0),0)}</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Protein</div>
+            <div class="text-lg font-bold text-[#00d4ff]">${dietMeals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.p,0),0)}g</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Carbs</div>
+            <div class="text-lg font-bold text-[#bf5fff]">${dietMeals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.c,0),0)}g</div>
+          </div>
+          <div class="bg-[#0a0a12] p-4 rounded-xl text-center">
+            <div class="text-xs text-gray-500">Fats</div>
+            <div class="text-lg font-bold text-[#ff6b35]">${dietMeals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.f,0),0)}g</div>
+          </div>
+        </div>
+        <div class="flex gap-2 overflow-x-auto pb-2 mb-6" id="mealTabs"></div>
+        <div id="mealDetail" class="bg-[#0a0a12] rounded-xl border border-[#ff6b3533] p-5"></div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+          ${['🥚 Eggs','🥣 Oats','🍚 Rice','🍗 Chicken','🥛 Milk','🥜 Peanut Butter','🍌 Banana','🌰 Dry Fruits'].map(f=>`
+            <div class="bg-[#0a0a12] p-3 rounded-xl text-center text-xs border border-[#1a1a2e]">${f}</div>`).join('')}
+        </div>
+      `;
+
+      // Workout day buttons + initial detail
+      renderWorkoutDay(workoutPlan[0].day);
+      // Meal tabs + initial detail
+      renderMealTab(0);
+    }
+
+    function macroBar(label, val, max, color) {
+      const pct = Math.min(100, Math.round(val / max * 100));
+      return `
+        <div class="mb-3">
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-gray-400">${label}</span>
+            <span class="font-mono" style="color:${color}">${val}g</span>
+          </div>
+          <div class="w-full h-1.5 bg-[#1a1a2e] rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width:${pct}%; background:${color}"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderWorkoutDay(dayName) {
+      const day = workoutPlan.find(d => d.day === dayName) || workoutPlan[0];
+      const btnContainer = document.getElementById('dayButtons');
+      btnContainer.innerHTML = workoutPlan.map(d => `
+        <button class="px-3 py-1.5 text-xs font-mono rounded-full border transition ${d.day===dayName ? 'border-[#ff6b35] text-[#ff6b35] bg-[#ff6b3510]' : 'border-[#1a1a2e] text-gray-400 hover:border-[#ff6b35]'}" onclick="window.selectWorkoutDay('${d.day}')">${d.day.slice(0,3)}</button>
+      `).join('');
+
+      const detail = document.getElementById('workoutDetail');
+      detail.innerHTML = `
+        <div class="flex items-center gap-3 mb-4">
+          <span class="w-1 h-8 rounded-full" style="background:${day.color}"></span>
+          <div>
+            <h3 class="font-bold">${day.day}</h3>
+            <p class="text-xs font-mono" style="color:${day.color}">${day.focus}</p>
+          </div>
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-xs text-gray-500 border-b border-[#1a1a2e]"><th class="pb-2 text-left">Exercise</th><th class="pb-2 text-center">Sets</th><th class="pb-2 text-center">Reps</th></tr></thead>
+          <tbody>
+            ${day.ex.map(e => `
+              <tr class="border-b border-[#1a1a2e]/50">
+                <td class="py-2">${e.n}</td>
+                <td class="py-2 text-center font-mono">${e.s}</td>
+                <td class="py-2 text-center text-gray-400">${e.r}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderMealTab(index) {
+      const meal = dietMeals[index];
+      const tabs = document.getElementById('mealTabs');
+      tabs.innerHTML = dietMeals.map((m, i) => `
+        <button class="flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono border transition ${i===index ? 'border-[#ff6b35] text-[#ff6b35] bg-[#ff6b3510]' : 'border-[#1a1a2e] text-gray-400'}" onclick="window.selectMeal(${i})">
+          <span>${m.icon}</span> <span>${m.time}</span>
+        </button>
+      `).join('');
+
+      const detail = document.getElementById('mealDetail');
+      const totalCal = meal.items.reduce((s,i)=>s+i.cal,0);
+      const totalP = meal.items.reduce((s,i)=>s+i.p,0);
+      const totalC = meal.items.reduce((s,i)=>s+i.c,0);
+      const totalF = meal.items.reduce((s,i)=>s+i.f,0);
+      detail.innerHTML = `
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-3xl">${meal.icon}</span>
+          <div>
+            <h3 class="font-bold">${meal.name}</h3>
+            <p class="text-xs font-mono" style="color:${meal.color}">${meal.time}</p>
+          </div>
+          <div class="ml-auto text-right">
+            <span class="text-2xl font-bold" style="color:${meal.color}">${totalCal}</span>
+            <span class="text-xs text-gray-500"> kcal</span>
+          </div>
+        </div>
+        <div class="space-y-2">
+          ${meal.items.map(item => `
+            <div class="flex justify-between items-center text-sm border-b border-[#1a1a2e]/50 pb-2">
+              <div><span class="font-medium">${item.f}</span> <span class="text-xs text-gray-500">${item.q}</span></div>
+              <div class="flex gap-3 text-xs font-mono">
+                <span style="color:#39ff7a">${item.p}g</span>
+                <span style="color:#00d4ff">${item.c}g</span>
+                <span style="color:#bf5fff">${item.f}g</span>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div class="grid grid-cols-4 gap-2 mt-4 pt-3 border-t border-[#1a1a2e]">
+          <div class="text-center"><span class="text-xs text-gray-500">Protein</span><br><span class="font-bold text-[#39ff7a]">${totalP}g</span></div>
+          <div class="text-center"><span class="text-xs text-gray-500">Carbs</span><br><span class="font-bold text-[#00d4ff]">${totalC}g</span></div>
+          <div class="text-center"><span class="text-xs text-gray-500">Fats</span><br><span class="font-bold text-[#bf5fff]">${totalF}g</span></div>
+          <div class="text-center"><span class="text-xs text-gray-500">Calories</span><br><span class="font-bold text-white">${totalCal}</span></div>
+        </div>
+      `;
+    }
+
+    // ---------- EVENT HANDLERS ----------
+    generateBtn.addEventListener('click', () => {
+      // Basic validation
+      const h = parseFloat(document.getElementById('height').value);
+      const w = parseFloat(document.getElementById('weight').value);
+      const a = parseFloat(document.getElementById('age').value);
+      const g = parseFloat(document.getElementById('goal').value);
+      const wake = document.getElementById('wake').value;
+      const study = parseFloat(document.getElementById('study').value);
+      if (h<100||h>250||w<30||w>200||a<14||a>50||g<30||g>200||study<1||study>16) {
+        alert('Please enter valid values (height 100-250, weight 30-200, age 14-50, goal 30-200, study 1-16)');
+        return;
+      }
+      user = { height: h, weight: w, age: a, goal: g, wake, study };
+      landing.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      renderDashboard();
+
+      // Create chart after DOM is ready
+      setTimeout(() => {
+        if (chartInstance) chartInstance.destroy();
+        const ctx = document.getElementById('transformChart')?.getContext('2d');
+        if (ctx) {
+          const trans = predictTransformation(user.weight, user.goal);
+          chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: trans.months.map(m=>`M${m.month}`),
+              datasets: [
+                { label:'Weight (kg)', data: trans.months.map(m=>m.weight), borderColor:'#39ff7a', backgroundColor:'rgba(57,255,122,0.1)', tension:0.4, fill:true },
+                { label:'Muscle gained (kg)', data: trans.months.map((_,i)=> trans.months.slice(0,i+1).reduce((s,x)=>s+x.muscle,0).toFixed(2)), borderColor:'#00d4ff', borderDash:[5,3], tension:0.4 }
+              ]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color:'#9ca3af' } } }, scales: { y: { grid: { color:'#1a1a2e' } } } }
+          });
+        }
+      }, 50);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      dashboard.classList.add('hidden');
+      landing.classList.remove('hidden');
+      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    });
+
+    // Tab switching
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        if (!tab) return;
+        tabBtns.forEach(b => b.classList.remove('active', 'border-[#10b981]', 'text-[#10b981]'));
+        btn.classList.add('active', 'border-[#10b981]', 'text-[#10b981]');
+        Object.keys(sections).forEach(key => sections[key].classList.add('hidden'));
+        sections[tab].classList.remove('hidden');
+        activeTab = tab;
+        if (tab === 'transform' && chartInstance) {
+          // refresh chart if needed
+          setTimeout(() => {
+            if (chartInstance) chartInstance.resize();
+          }, 50);
+        }
+      });
+    });
+
+    // Expose functions for inline onclick
+    window.selectWorkoutDay = (day) => {
+      renderWorkoutDay(day);
+    };
+    window.selectMeal = (idx) => {
+      renderMealTab(idx);
+    };
+  })();
+</script>
+</body>
+</html>
