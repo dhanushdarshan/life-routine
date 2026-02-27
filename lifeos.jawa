@@ -1,0 +1,227 @@
+// ─── State ───────────────────────────────────────────────
+let userData = null;
+let chartInstance = null;
+let activeWorkoutDay = 'Monday';
+let activeMealIdx = 0;
+
+// ─── Calculations ────────────────────────────────────────
+function calcBMR(w, h, a) {
+  return 10 * w + 6.25 * h - 5 * a + 5;
+}
+
+function calcCalories(w, h, a) {
+  const bmr = calcBMR(w, h, a);
+  const maintenance = Math.round(bmr * 1.55);
+  const bulking = maintenance + 350;
+  const cutting = maintenance - 400;
+  const protein = Math.round(w * 1.8);
+  const fatCals = Math.round(maintenance * 0.25);
+  const fat = Math.round(fatCals / 9);
+  const carbs = Math.round((maintenance - protein * 4 - fatCals) / 4);
+  const bFatCals = Math.round(bulking * 0.25);
+  const bFat = Math.round(bFatCals / 9);
+  const bCarbs = Math.round((bulking - protein * 4 - bFatCals) / 4);
+  return {
+    bmr: Math.round(bmr), maintenance, bulking, cutting,
+    macros: { protein, carbs, fat },
+    bMacros: { protein, carbs: bCarbs, fat: bFat }
+  };
+}
+
+function calcTransformation(cw, gw) {
+  const isBulk = gw > cw;
+  const weeklyChange = isBulk ? 0.25 : -0.4;
+  const months = [];
+  let w = cw;
+  for (let m = 1; m <= 6; m++) {
+    w = parseFloat((w + weeklyChange * 4).toFixed(1));
+    if (isBulk) w = Math.min(w, gw + 3);
+    else w = Math.max(w, gw - 3);
+    const muscle = parseFloat((isBulk ? 0.5 + Math.random() * 0.3 : 0.1 + Math.random() * 0.15).toFixed(2));
+    const fat = parseFloat(((weeklyChange * 4) - (isBulk ? muscle : -muscle)).toFixed(2));
+    const progress = Math.min(100, Math.round(Math.abs(cw - w) / Math.max(Math.abs(cw - gw), 0.1) * 100));
+    const physiques = isBulk
+      ? ['Strength foundation building. Lifts increasing, slight fullness in muscles.',
+         'Visible muscle density improvements. Shoulders and chest filling out.',
+         'Noticeable size gains. Arms showing definition. Posture improving.',
+         'Clear transformation visible. Clothes fitting differently. Energy elevated.',
+         'Athletic build emerging. Compound lifts significantly stronger.',
+         'Solid muscular foundation. Lean mass gains visible. Ready for a cut phase.']
+      : ['Water weight dropping. Energy dip first 2 weeks, then stabilizes.',
+         'Face looking sharper. Belt tightening. Waistline reducing.',
+         'Visible abs emerging for most. Vascularity appearing on forearms.',
+         'Athletic leanness visible. Jaw and cheekbones more defined.',
+         'Competition-prep level leanness emerging. Muscle separation visible.',
+         'Transformation complete. Lean, athletic physique achieved.'];
+    months.push({ month: m, weight: w, muscle, fat, progress, physique: physiques[m - 1] });
+  }
+  return { months, isBulk };
+}
+
+function calcRoutine(wakeTime, studyHours) {
+  const [wh, wm] = wakeTime.split(':').map(Number);
+  const wakeMins = wh * 60 + (wm || 0);
+  const fmt = (mins) => {
+    const total = ((mins % 1440) + 1440) % 1440;
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    const ap = h >= 12 ? 'PM' : 'AM';
+    const dh = h % 12 === 0 ? 12 : h % 12;
+    return `${dh}:${String(m).padStart(2, '0')} ${ap}`;
+  };
+  const extraStudy = Math.max(60, studyHours * 20);
+  return [
+    { t: fmt(wakeMins),                    act: '🌅 Wake Up + Cold Water',                    type: 'health',  dur: 10 },
+    { t: fmt(wakeMins + 10),               act: '🧘 Meditation / Journaling',                  type: 'mindset', dur: 20 },
+    { t: fmt(wakeMins + 30),               act: '🥚 Breakfast (High Protein)',                  type: 'meal',    dur: 30 },
+    { t: fmt(wakeMins + 60),               act: '📚 Deep Work Block 1 – DSA / Algorithms',     type: 'study',   dur: 90 },
+    { t: fmt(wakeMins + 150),              act: '☕ Short Break + Walk',                        type: 'break',   dur: 15 },
+    { t: fmt(wakeMins + 165),              act: '📘 Deep Work Block 2 – Core CS (OS/CN/DBMS)', type: 'study',   dur: 90 },
+    { t: fmt(wakeMins + 255),              act: '🍱 Lunch (Balanced Macros)',                   type: 'meal',    dur: 45 },
+    { t: fmt(wakeMins + 300),              act: '💪 Workout – 45 Min Bodyweight',              type: 'workout', dur: 45 },
+    { t: fmt(wakeMins + 345),              act: '🚿 Shower + Recovery',                        type: 'health',  dur: 25 },
+    { t: fmt(wakeMins + 370),              act: '🌐 Deep Work Block 3 – Web Dev / Projects',   type: 'study',   dur: extraStudy },
+    { t: fmt(wakeMins + 370 + extraStudy), act: '🍌 Evening Snack',                            type: 'meal',    dur: 15 },
+    { t: fmt(wakeMins + 385 + extraStudy), act: '📖 Revision / LeetCode / Flashcards',         type: 'study',   dur: 60 },
+    { t: fmt(wakeMins + 445 + extraStudy), act: '🍗 Dinner (High Protein)',                    type: 'meal',    dur: 45 },
+    { t: fmt(wakeMins + 490 + extraStudy), act: '📵 Screen-free Wind Down',                    type: 'mindset', dur: 30 },
+    { t: fmt(wakeMins + 520 + extraStudy), act: '😴 Sleep (8 hours)',                          type: 'sleep',   dur: 0  },
+  ];
+}
+
+// ─── Validation + Generate ────────────────────────────────
+function v(id, err, ok) {
+  const el = document.getElementById(id);
+  const errEl = document.getElementById('e-' + id.replace('f-', ''));
+  const val = parseFloat(el.value);
+  if (ok(val)) { errEl.textContent = ''; return val; }
+  errEl.textContent = err; return null;
+}
+
+function generatePlan() {
+  const height   = v('f-height', 'Enter valid height (100–250cm)',    x => x >= 100 && x <= 250);
+  const weight   = v('f-weight', 'Enter valid weight (30–200kg)',     x => x >= 30  && x <= 200);
+  const age      = v('f-age',    'Enter valid age (14–50)',           x => x >= 14  && x <= 50);
+  const goalWt   = v('f-goal',   'Enter valid goal weight (30–200kg)',x => x >= 30  && x <= 200);
+  const studyH   = v('f-study',  'Enter 1–16 study hours',           x => x >= 1   && x <= 16);
+  const wakeTime = document.getElementById('f-wake').value;
+  if ([height, weight, age, goalWt, studyH].some(x => x === null)) return;
+  userData = { height, weight, age, goalWeight: goalWt, wakeUpTime: wakeTime, studyHours: studyH };
+  buildDashboard();
+  document.getElementById('landing').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  window.scrollTo(0, 0);
+}
+
+function resetApp() {
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('landing').style.display = 'flex';
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+}
+
+function switchTab(name, btn) {
+  ['calories','transform','routine','workout','diet'].forEach(s => {
+    document.getElementById('sec-' + s).style.display = s === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  if (name === 'transform') renderChart();
+}
+
+function buildDashboard() {
+  const u = userData;
+  const cal = calcCalories(u.weight, u.height, u.age);
+  const { months, isBulk } = calcTransformation(u.weight, u.goalWeight);
+  const routine = calcRoutine(u.wakeUpTime, u.studyHours);
+  document.getElementById('hdr-info').textContent = `${u.weight}kg → ${u.goalWeight}kg`;
+  document.getElementById('stat-strip').innerHTML = [
+    { l:'Age', v:u.age+'y' }, { l:'Height', v:u.height+'cm' },
+    { l:'Weight', v:u.weight+'kg' }, { l:'Goal', v:u.goalWeight+'kg' },
+    { l:'Wake-up', v:u.wakeUpTime }, { l:'Study', v:u.studyHours+'h/day' },
+    { l:'BMR', v:cal.bmr+' kcal' }, { l:'Maintenance', v:cal.maintenance+' kcal' },
+  ].map(({l,v}) => `<div class="stat-item"><div class="sl">${l}</div><div class="sv">${v}</div></div>`).join('');
+  buildCalories(cal, u.weight);
+  buildTransformation(months, isBulk, u.weight, u.goalWeight);
+  buildRoutine(routine);
+  buildWorkout();
+  buildDiet(u.weight);
+}
+
+function selectDay(day) {
+  activeWorkoutDay = day;
+  document.querySelectorAll('.day-btn').forEach(b => {
+    b.style.borderColor = 'var(--bg4)';
+    b.style.color = 'var(--gray)';
+    b.style.background = 'var(--bg3)';
+  });
+  const w = WORKOUT.find(x => x.day === day);
+  const btn = document.getElementById('dbtn-' + day);
+  if (btn && w) {
+    btn.style.borderColor = w.color;
+    btn.style.color = w.color;
+    btn.style.background = w.color + '15';
+  }
+  renderWorkoutDayContent();
+}
+
+function selectMeal(idx) {
+  activeMealIdx = idx;
+  document.querySelectorAll('.meal-tab').forEach((b, i) => {
+    const m = MEALS[i];
+    b.style.borderColor = 'var(--bg4)';
+    b.style.color = 'var(--gray)';
+    b.style.background = 'var(--bg3)';
+  });
+  const tab = document.getElementById('mtab-' + idx);
+  const m = MEALS[idx];
+  if (tab && m) {
+    tab.style.borderColor = m.color;
+    tab.style.color = m.color;
+    tab.style.background = m.color + '15';
+  }
+  renderMealDetail(idx);
+}
+
+function renderChart() {
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const canvas = document.getElementById('transform-chart');
+  if (!canvas) return;
+  const { months } = calcTransformation(userData.weight, userData.goalWeight);
+  chartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: months.map(m => `Month ${m.month}`),
+      datasets: [
+        {
+          label: 'Weight (kg)',
+          data: months.map(m => m.weight),
+          borderColor: '#39ff7a', backgroundColor: 'rgba(57,255,122,.08)',
+          tension: 0.4, fill: true,
+          pointBackgroundColor: '#39ff7a', pointBorderColor: '#050508', pointBorderWidth: 2, pointRadius: 6,
+        },
+        {
+          label: 'Cumulative Muscle Gain (kg)',
+          data: months.map((m,i) => parseFloat(months.slice(0,i+1).reduce((s,x)=>s+x.muscle,0).toFixed(2))),
+          borderColor: '#00d4ff', backgroundColor: 'transparent',
+          tension: 0.4, fill: false, borderDash: [6,3],
+          pointBackgroundColor: '#00d4ff', pointBorderColor: '#050508', pointBorderWidth: 2, pointRadius: 5,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#9ca3af', font: { family: 'JetBrains Mono', size: 11 }, boxWidth: 16 } },
+        tooltip: {
+          backgroundColor: '#12121e', borderColor: '#1a1a2e', borderWidth: 1,
+          titleColor: '#e8e8f0', bodyColor: '#9ca3af',
+          titleFont: { family: 'Syne', size: 13 }, bodyFont: { family: 'JetBrains Mono', size: 11 },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7280', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1a1a2e' } },
+        y: { ticks: { color: '#6b7280', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1a1a2e' } },
+      },
+    },
+  });
+}
